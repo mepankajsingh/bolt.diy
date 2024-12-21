@@ -8,7 +8,6 @@ import { db, chatId } from '~/lib/persistence/useChatHistory';
 import { forkChat } from '~/lib/persistence/db';
 import { toast } from 'react-toastify';
 import WithTooltip from '~/components/ui/Tooltip';
-import { TokenUsageStats } from './TokenUsageStats';
 
 interface MessagesProps {
   id?: string;
@@ -99,11 +98,6 @@ export const Messages = React.forwardRef<HTMLDivElement, MessagesProps>((props: 
                     </div>
                   )}
                 </div>
-                {!isUserMessage && isLast && (
-                  <div className="px-6 pt-2">
-                    <TokenUsageStats messages={messages} />
-                  </div>
-                )}
               </div>
             );
           })
