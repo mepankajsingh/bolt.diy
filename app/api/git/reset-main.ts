@@ -1,12 +1,15 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { ActionFunctionArgs } from '@remix-run/node';
 
 const execAsync = promisify(exec);
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -24,9 +27,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await execAsync(`git remote remove ${remote}`);
     }
 
-    return res.status(200).json({ success: true });
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Error:', error);
-    return res.status(500).json({ error: 'Failed to reset to main' });
+    return new Response(JSON.stringify({ error: 'Failed to reset to main' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

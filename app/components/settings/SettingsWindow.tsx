@@ -9,13 +9,13 @@ import ChatHistoryTab from './chat-history/ChatHistoryTab';
 import ProvidersTab from './providers/ProvidersTab';
 import { useSettings } from '~/lib/hooks/useSettings';
 import FeaturesTab from './features/FeaturesTab';
-import DebugTab from './debug/DebugTab';
 import EventLogsTab from './event-logs/EventLogsTab';
 import ConnectionsTab from './connections/ConnectionsTab';
 import TokenUsageTab from './tokenusagestats/TokenUsageTab';
 import { useTokenUsage } from '~/lib/hooks/useTokenUsage';
 import { useStore } from '@nanostores/react';
 import { chatStore } from '~/lib/stores/chat';
+import DebugTab from './debug/DebugTab';
 
 interface SettingsProps {
   open: boolean;
