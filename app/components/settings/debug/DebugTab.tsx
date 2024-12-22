@@ -63,10 +63,10 @@ function getSystemInfo(): SystemInfo {
     }
 
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
   const getBrowserInfo = (): string => {
@@ -101,23 +101,38 @@ function getSystemInfo(): SystemInfo {
     const platform = navigator.platform;
 
     if (ua.includes('Win')) {
-      return 'Windows';
+      const match = ua.match(/Windows NT (\d+\.\d+)/);
+      const versions: { [key: string]: string } = {
+        '10.0': 'Windows 11/10',
+        '6.3': 'Windows 8.1',
+        '6.2': 'Windows 8',
+        '6.1': 'Windows 7',
+        '6.0': 'Windows Vista',
+      };
+
+      return match ? versions[match[1]] || 'Windows' : 'Windows';
     }
 
     if (ua.includes('Mac')) {
-      if (ua.includes('iPhone') || ua.includes('iPad')) {
-        return 'iOS';
+      if (ua.includes('iPhone') || ua.includes('iPad') || ua.includes('iPod')) {
+        const match = ua.match(/OS (\d+_\d+)/);
+
+        return match ? `iOS ${match[1].replace('_', '.')}` : 'iOS';
       }
 
-      return 'macOS';
+      const match = ua.match(/Mac OS X (\d+[._]\d+)/);
+
+      return match ? `macOS ${match[1].replace('_', '.')}` : 'macOS';
     }
 
     if (ua.includes('Linux')) {
-      return 'Linux';
-    }
+      if (ua.includes('Android')) {
+        const match = ua.match(/Android (\d+(\.\d+)*)/);
 
-    if (ua.includes('Android')) {
-      return 'Android';
+        return match ? `Android ${match[1]}` : 'Android';
+      }
+
+      return 'Linux';
     }
 
     return platform || 'Unknown';
@@ -137,27 +152,47 @@ function getSystemInfo(): SystemInfo {
     return 'Desktop';
   };
 
-  // Get more detailed memory info if available
+  const getDisplayInfo = (): string => {
+    const width = window.screen.width * window.devicePixelRatio;
+    const height = window.screen.height * window.devicePixelRatio;
+    const refreshRate = (screen as any).refreshRate || 60;
+
+    return `${width}x${height} (${window.screen.colorDepth}-bit) @${window.devicePixelRatio}x ${refreshRate}Hz`;
+  };
+
   const getMemoryInfo = (): string => {
     if ('memory' in performance) {
       const memory = (performance as any).memory;
-      return `${formatBytes(memory.jsHeapSizeLimit)} (Used: ${formatBytes(memory.usedJSHeapSize)})`;
+      const total = formatBytes(memory.jsHeapSizeLimit);
+      const used = formatBytes(memory.usedJSHeapSize);
+      const available = formatBytes(memory.totalJSHeapSize - memory.usedJSHeapSize);
+
+      return `${total} (Used: ${used}, Available: ${available})`;
+    }
+
+    if ('deviceMemory' in navigator) {
+      return `~${(navigator as any).deviceMemory} GB`;
     }
 
     return 'Not available';
   };
 
+  const getCPUInfo = (): number => {
+    const cores = navigator.hardwareConcurrency || 0;
+    const physicalCores = Math.ceil(cores / 2);
+
+    return physicalCores;
+  };
+
   return {
     os: getOperatingSystem(),
     browser: getBrowserInfo(),
-    screen: `${window.screen.width}x${window.screen.height}`,
+    screen: getDisplayInfo(),
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     memory: getMemoryInfo(),
-    cores: navigator.hardwareConcurrency || 0,
+    cores: getCPUInfo(),
     deviceType: getDeviceType(),
-
-    // Add new fields
     colorDepth: `${window.screen.colorDepth}-bit`,
     pixelRatio: window.devicePixelRatio,
     online: navigator.onLine,
@@ -488,10 +523,8 @@ export default function DebugTab() {
                 <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.browser}</p>
               </div>
               <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Display</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">
-                  {systemInfo.screen} ({systemInfo.colorDepth}) @{systemInfo.pixelRatio}x
-                </p>
+                <p className="text-xs text-bolt-elements-textSecondary">Memory</p>
+                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.memory}</p>
               </div>
               <div>
                 <p className="text-xs text-bolt-elements-textSecondary">Connection</p>
@@ -505,8 +538,10 @@ export default function DebugTab() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Screen Resolution</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.screen}</p>
+                <p className="text-xs text-bolt-elements-textSecondary">Display</p>
+                <p className="text-sm font-medium text-bolt-elements-textPrimary">
+                  {systemInfo.screen} ({systemInfo.colorDepth}) @{systemInfo.pixelRatio}x
+                </p>
               </div>
               <div>
                 <p className="text-xs text-bolt-elements-textSecondary">Language</p>
