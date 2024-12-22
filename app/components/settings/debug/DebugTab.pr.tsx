@@ -76,6 +76,8 @@ export default function PullRequest() {
   const [error, setError] = useState<string | null>(null);
   const [activePR, setActivePR] = useState<number | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [filterType, setFilterType] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const loadPullRequests = async () => {
     try {
@@ -165,55 +167,90 @@ export default function PullRequest() {
           Refresh
         </button>
       </div>
+      <div className="flex gap-4 mb-4">
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="px-3 py-1 rounded-md bg-bolt-elements-surface-hover text-bolt-elements-textPrimary"
+        >
+          <option value="all">All PRs</option>
+          <option value="feat">Features</option>
+          <option value="fix">Fixes</option>
+          <option value="refactor">Refactors</option>
+          <option value="docs">Documentation</option>
+        </select>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search PRs..."
+          className="px-3 py-1 rounded-md bg-bolt-elements-surface-hover text-bolt-elements-textPrimary"
+        />
+      </div>
       <div className="space-y-2">
-        {pullRequests.map((pr) => (
-          <a
-            key={pr.number}
-            href={pr.html_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block p-3 rounded-lg bg-bolt-elements-surface-hover hover:bg-bolt-elements-surface-hoverHover transition-colors"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <h4 className="text-bolt-elements-textPrimary font-medium">
-                  #{pr.number} {pr.title}
-                </h4>
-                <p className="text-sm text-bolt-elements-textSecondary">
-                  by {pr.user?.login || pr.author?.login || 'Unknown'}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handlePRCheckout(pr.number);
-                    }}
-                    disabled={activePR === pr.number || isCheckingOut}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                      activePR === pr.number || isCheckingOut
-                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                        : 'bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover'
-                    }`}
-                  >
-                    {activePR === pr.number ? 'Active' : 'Test PR'}
-                  </button>
-                  <a
-                    href={pr.html_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="px-3 py-1 text-sm bg-bolt-elements-button-secondary-background text-bolt-elements-button-secondary-text rounded-md hover:bg-bolt-elements-button-secondary-backgroundHover transition-colors"
-                  >
-                    View on GitHub
-                  </a>
+        {pullRequests
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .filter((pr) => {
+            const title = pr.title.toLowerCase();
+            const matchesType =
+              filterType === 'all' ||
+              (filterType === 'feat' && title.includes('feat')) ||
+              (filterType === 'fix' && title.includes('fix')) ||
+              (filterType === 'refactor' && title.includes('refactor')) ||
+              (filterType === 'docs' && title.includes('docs'));
+
+            const matchesSearch = !searchQuery || title.includes(searchQuery.toLowerCase());
+
+            return matchesType && matchesSearch;
+          })
+          .map((pr) => (
+            <a
+              key={pr.number}
+              href={pr.html_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block p-3 rounded-lg bg-bolt-elements-surface-hover hover:bg-bolt-elements-surface-hoverHover transition-colors"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="text-bolt-elements-textPrimary font-medium">
+                    #{pr.number} {pr.title}
+                  </h4>
+                  <p className="text-sm text-bolt-elements-textSecondary">
+                    by {pr.user?.login || pr.author?.login || 'Unknown'}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handlePRCheckout(pr.number);
+                      }}
+                      disabled={activePR === pr.number || isCheckingOut}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        activePR === pr.number || isCheckingOut
+                          ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                          : 'bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover'
+                      }`}
+                    >
+                      {activePR === pr.number ? 'Active' : 'Test PR'}
+                    </button>
+                    <a
+                      href={pr.html_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="px-3 py-1 text-sm bg-bolt-elements-button-secondary-background text-bolt-elements-button-secondary-text rounded-md hover:bg-bolt-elements-button-secondary-backgroundHover transition-colors"
+                    >
+                      View on GitHub
+                    </a>
+                  </div>
                 </div>
+                <span className="text-xs text-bolt-elements-textSecondary">
+                  {new Date(pr.created_at).toLocaleDateString()}
+                </span>
               </div>
-              <span className="text-xs text-bolt-elements-textSecondary">
-                {new Date(pr.created_at).toLocaleDateString()}
-              </span>
-            </div>
-          </a>
-        ))}
+            </a>
+          ))}
       </div>
       {activePR && (
         <div className="flex justify-end mt-4">
