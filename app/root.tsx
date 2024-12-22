@@ -6,6 +6,8 @@ import { themeStore } from './lib/stores/theme';
 import { stripIndents } from './utils/stripIndent';
 import { createHead } from 'remix-island';
 import { useEffect } from 'react';
+import { RecoilRoot } from 'recoil';
+import type { Theme } from './types/theme';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
@@ -70,22 +72,39 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   return (
-    <>
-      {children}
-      <ScrollRestoration />
-      <Scripts />
-    </>
+    <html lang="en" data-theme={theme}>
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        {children}
+        <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
   );
 }
 
 import { logStore } from './lib/stores/logs';
 
 export default function App() {
-  const theme = useStore(themeStore);
+  useEffect(() => {
+    const storedTheme = localStorage.getItem('bolt_theme') as Theme | null;
+
+    if (storedTheme && (storedTheme === 'dark' || storedTheme === 'light')) {
+      themeStore.set(storedTheme);
+    } else {
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      themeStore.set(isDark ? 'dark' : 'light');
+    }
+  }, []);
 
   useEffect(() => {
     logStore.logSystem('Application initialized', {
-      theme,
+      theme: themeStore.get(),
       platform: navigator.platform,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
@@ -93,8 +112,10 @@ export default function App() {
   }, []);
 
   return (
-    <Layout>
-      <Outlet />
-    </Layout>
+    <RecoilRoot>
+      <Layout>
+        <Outlet />
+      </Layout>
+    </RecoilRoot>
   );
 }

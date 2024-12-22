@@ -5,6 +5,7 @@ import git, { type GitAuth, type PromiseFsClient } from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import Cookies from 'js-cookie';
 import { toast } from 'react-toastify';
+import { execAsync } from '~/lib/utils/execAsync';
 
 const lookupSavedPassword = (url: string) => {
   const domain = url.split('/')[2];
@@ -32,15 +33,8 @@ export function useGit() {
   const [ready, setReady] = useState(false);
   const [webcontainer, setWebcontainer] = useState<WebContainer>();
   const [fs, setFs] = useState<PromiseFsClient>();
+  const [isOnPRBranch, setIsOnPRBranch] = useState(false);
   const fileData = useRef<Record<string, { data: any; encoding?: string }>>({});
-  useEffect(() => {
-    webcontainerPromise.then((container) => {
-      fileData.current = {};
-      setWebcontainer(container);
-      setFs(getFs(container, fileData));
-      setReady(true);
-    });
-  }, []);
 
   const gitClone = useCallback(
     async (url: string) => {
@@ -95,7 +89,72 @@ export function useGit() {
     [webcontainer],
   );
 
-  return { ready, gitClone };
+  const returnToPreviousBranch = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/git/return-branch', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as { message?: string };
+        throw new Error(errorData.message || 'Failed to return to previous branch');
+      }
+
+      toast.success('Successfully returned to previous branch');
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Error returning to previous branch:', error.message);
+        toast.error(error.message);
+      } else {
+        console.error('Error returning to previous branch:', String(error));
+        toast.error(String(error));
+      }
+
+      throw error;
+    }
+  }, []);
+
+  // Check if we're on a PR branch
+  const checkIfOnPRBranch = useCallback(async () => {
+    try {
+      const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD');
+      setIsOnPRBranch(currentBranch.trim().startsWith('pr-'));
+    } catch (error) {
+      console.error('Error checking branch:', error);
+      setIsOnPRBranch(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    webcontainerPromise.then((container) => {
+      fileData.current = {};
+      setWebcontainer(container);
+      setFs(getFs(container, fileData));
+      setReady(true);
+      checkIfOnPRBranch();
+    });
+  }, [checkIfOnPRBranch]);
+
+  // Recheck PR branch status periodically
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+
+    const interval = setInterval(checkIfOnPRBranch, 5000);
+
+    // eslint-disable-next-line consistent-return
+    return () => {
+      clearInterval(interval);
+    };
+  }, [ready, checkIfOnPRBranch]);
+
+  return {
+    ready,
+    gitClone,
+    returnToPreviousBranch,
+    isOnPRBranch,
+  };
 }
 
 const getFs = (

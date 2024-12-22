@@ -2,6 +2,7 @@ import React from 'react';
 import { Switch } from '~/components/ui/Switch';
 import { PromptLibrary } from '~/lib/common/prompt-library';
 import { useSettings } from '~/lib/hooks/useSettings';
+import PullRequest from '~/components/settings/debug/DebugTab.pr';
 
 export default function FeaturesTab() {
   const {
@@ -15,6 +16,8 @@ export default function FeaturesTab() {
     promptId,
     setPromptId,
   } = useSettings();
+
+  const [showPullRequests, setShowPullRequests] = React.useState(false);
 
   const handleToggle = (enabled: boolean) => {
     enableDebugMode(enabled);
@@ -71,6 +74,18 @@ export default function FeaturesTab() {
             ))}
           </select>
         </div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <span className="text-bolt-elements-textPrimary">Pull Requests</span>
+            <p className="text-sm text-bolt-elements-textSecondary">View and manage pull requests</p>
+          </div>
+          <Switch className="ml-auto" checked={showPullRequests} onCheckedChange={setShowPullRequests} />
+        </div>
+        {showPullRequests && (
+          <div className="mt-4 bg-bolt-elements-surface rounded-lg p-4">
+            <PullRequest />
+          </div>
+        )}
       </div>
     </div>
   );
