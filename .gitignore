@@ -40,4 +40,8 @@ site
 
 # commit file ignore
 app/commit.json
+<<<<<<< Updated upstream
 app/components/settings/features/pull-requests/README.md
+=======
+*.md
+>>>>>>> Stashed changes
