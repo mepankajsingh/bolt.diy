@@ -1,17 +1,39 @@
 import { useMemo } from 'react';
 import type { Message } from 'ai';
-import type { ModelUsage, TokenUsage } from '~/types/token-usage';
+import type { ModelUsage, TokenUsage, UsageAnnotation } from '~/types/token-usage';
+import { useStore } from '@nanostores/react';
+import { chatStore } from '~/lib/stores/chat';
 
-export function useTokenUsage(messages: Message[]) {
+interface MessageContent {
+  type: string;
+  text: string;
+}
+
+export function useTokenUsage(messages?: Message[]) {
+  const chatState = useStore(chatStore);
+  const messageList = messages ?? chatState.messages;
+
   return useMemo(() => {
     const modelUsages = new Map<string, ModelUsage>();
 
+    if (!messageList?.length) {
+      return {
+        modelUsages,
+        totalUsage: { completionTokens: 0, promptTokens: 0, totalTokens: 0 } as TokenUsage,
+        promptPercentage: '0.0',
+        completionPercentage: '0.0',
+      };
+    }
+
     // Process all messages to gather model usage statistics
-    messages.forEach((message, index) => {
+    messageList.forEach((message: Message, index: number) => {
       if (message.role === 'user') {
-        const content = Array.isArray(message.content)
-          ? message.content.find((c) => c.type === 'text')?.text
-          : message.content;
+        const content =
+          typeof message.content === 'string'
+            ? message.content
+            : Array.isArray(message.content)
+              ? (message.content as MessageContent[]).find((c) => c.type === 'text')?.text
+              : String(message.content);
 
         if (typeof content === 'string') {
           const modelMatch = content.match(/\[Model: (.*?)\]/);
@@ -20,11 +42,10 @@ export function useTokenUsage(messages: Message[]) {
           const provider = providerMatch?.[1];
 
           if (model && provider) {
-            const assistantMessage = messages[index + 1];
-            const usageAnnotation = assistantMessage?.annotations?.find((a) => {
-              const annotation = a as { type?: string; value?: TokenUsage };
+            const assistantMessage = messageList[index + 1];
+            const usageAnnotation = assistantMessage?.annotations?.find((annotation: any) => {
               return annotation?.type === 'usage' && annotation?.value !== undefined;
-            }) as { value: TokenUsage } | undefined;
+            }) as UsageAnnotation | undefined;
 
             const key = `${provider}:${model}`;
             const existing = modelUsages.get(key) || {
@@ -69,5 +90,5 @@ export function useTokenUsage(messages: Message[]) {
       promptPercentage,
       completionPercentage,
     };
-  }, [messages]);
+  }, [messageList]);
 }

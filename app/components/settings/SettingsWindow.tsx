@@ -12,23 +12,49 @@ import FeaturesTab from './features/FeaturesTab';
 import DebugTab from './debug/DebugTab';
 import EventLogsTab from './event-logs/EventLogsTab';
 import ConnectionsTab from './connections/ConnectionsTab';
+import TokenUsageTab from './tokenusagestats/TokenUsageTab';
+import { useTokenUsage } from '~/lib/hooks/useTokenUsage';
 
 interface SettingsProps {
   open: boolean;
   onClose: () => void;
 }
 
-type TabType = 'chat-history' | 'providers' | 'features' | 'debug' | 'event-logs' | 'connection';
+type TabType = 'chat-history' | 'providers' | 'features' | 'debug' | 'event-logs' | 'connection' | 'advanced-usage';
 
 export const SettingsWindow = ({ open, onClose }: SettingsProps) => {
   const { debug, eventLogs } = useSettings();
   const [activeTab, setActiveTab] = useState<TabType>('chat-history');
+  const { modelUsages, totalUsage } = useTokenUsage();
+
+  // Get all model usages and sort them by total tokens
+  const sortedUsages = Array.from(modelUsages.values()).sort((a, b) => b.totalTokens - a.totalTokens);
 
   const tabs: { id: TabType; label: string; icon: string; component?: ReactElement }[] = [
     { id: 'chat-history', label: 'Chat History', icon: 'i-ph:book', component: <ChatHistoryTab /> },
     { id: 'providers', label: 'Providers', icon: 'i-ph:key', component: <ProvidersTab /> },
     { id: 'connection', label: 'Connection', icon: 'i-ph:link', component: <ConnectionsTab /> },
     { id: 'features', label: 'Features', icon: 'i-ph:star', component: <FeaturesTab /> },
+    {
+      id: 'advanced-usage',
+      label: 'Advanced Usage',
+      icon: 'i-ph:chart-line',
+      component:
+        sortedUsages.length > 0 ? (
+          <div className="space-y-3">
+            {sortedUsages.map((usage, index) => (
+              <TokenUsageTab
+                key={`${usage.provider}:${usage.model}`}
+                usage={usage}
+                totalTokens={totalUsage.totalTokens}
+                showTitle={index === 0}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-bolt-elements-textSecondary p-3">No token usage data available yet.</div>
+        ),
+    },
     ...(debug
       ? [
           {
