@@ -1,623 +1,342 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useSettings } from '~/lib/hooks/useSettings';
-import commit from '~/commit.json';
-import { toast } from 'react-toastify';
-import { providerBaseUrlEnvKeys } from '~/utils/constants';
+import { useState, useEffect } from 'react';
 
-interface ProviderStatus {
-  name: string;
-  enabled: boolean;
-  isLocal: boolean;
-  isRunning: boolean | null;
-  error?: string;
-  lastChecked: Date;
-  responseTime?: number;
-  url: string | null;
+interface PullRequest {
+  number: number;
+  title: string;
+  head: {
+    ref: string;
+    sha: string;
+  };
+  user?: {
+    login: string;
+  };
+  author?: {
+    login: string;
+  };
+  html_url: string;
+  created_at: string;
 }
 
 interface SystemInfo {
-  os: string;
-  browser: string;
-  screen: string;
-  language: string;
-  timezone: string;
-  memory: string;
-  cores: number;
-  deviceType: string;
-  colorDepth: string;
-  pixelRatio: number;
-  online: boolean;
-  cookiesEnabled: boolean;
-  doNotTrack: boolean;
+  version: string;
+  platform: string;
+  arch: string;
 }
 
-interface IProviderConfig {
-  name: string;
-  settings: {
-    enabled: boolean;
-    baseUrl?: string;
+interface ProviderStatus {
+  [key: string]: {
+    status: 'online' | 'offline' | 'error';
+    message?: string;
   };
 }
 
-interface CommitData {
-  commit: string;
-  version?: string;
-}
-
-const connitJson: CommitData = commit;
-
-const LOCAL_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
-const versionHash = connitJson.commit;
-const versionTag = connitJson.version;
-const GITHUB_URLS = {
-  original: 'https://api.github.com/repos/stackblitz-labs/bolt.diy/commits/main',
-  fork: 'https://api.github.com/repos/Stijnus/bolt.new-any-llm/commits/main',
-  commitJson: (branch: string) =>
-    `https://raw.githubusercontent.com/stackblitz-labs/bolt.diy/${branch}/app/commit.json`,
-};
-
-function getSystemInfo(): SystemInfo {
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) {
-      return '0 Bytes';
-    }
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getBrowserInfo = (): string => {
-    const ua = navigator.userAgent;
-    let browser = 'Unknown';
-
-    if (ua.includes('Firefox/')) {
-      browser = 'Firefox';
-    } else if (ua.includes('Chrome/')) {
-      if (ua.includes('Edg/')) {
-        browser = 'Edge';
-      } else if (ua.includes('OPR/')) {
-        browser = 'Opera';
-      } else {
-        browser = 'Chrome';
-      }
-    } else if (ua.includes('Safari/')) {
-      if (!ua.includes('Chrome')) {
-        browser = 'Safari';
-      }
-    }
-
-    // Extract version number
-    const match = ua.match(new RegExp(`${browser}\\/([\\d.]+)`));
-    const version = match ? ` ${match[1]}` : '';
-
-    return `${browser}${version}`;
-  };
-
-  const getOperatingSystem = (): string => {
-    const ua = navigator.userAgent;
-    const platform = navigator.platform;
-
-    if (ua.includes('Win')) {
-      return 'Windows';
-    }
-
-    if (ua.includes('Mac')) {
-      if (ua.includes('iPhone') || ua.includes('iPad')) {
-        return 'iOS';
-      }
-
-      return 'macOS';
-    }
-
-    if (ua.includes('Linux')) {
-      return 'Linux';
-    }
-
-    if (ua.includes('Android')) {
-      return 'Android';
-    }
-
-    return platform || 'Unknown';
-  };
-
-  const getDeviceType = (): string => {
-    const ua = navigator.userAgent;
-
-    if (ua.includes('Mobile')) {
-      return 'Mobile';
-    }
-
-    if (ua.includes('Tablet')) {
-      return 'Tablet';
-    }
-
-    return 'Desktop';
-  };
-
-  // Get more detailed memory info if available
-  const getMemoryInfo = (): string => {
-    if ('memory' in performance) {
-      const memory = (performance as any).memory;
-      return `${formatBytes(memory.jsHeapSizeLimit)} (Used: ${formatBytes(memory.usedJSHeapSize)})`;
-    }
-
-    return 'Not available';
-  };
-
-  return {
-    os: getOperatingSystem(),
-    browser: getBrowserInfo(),
-    screen: `${window.screen.width}x${window.screen.height}`,
-    language: navigator.language,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    memory: getMemoryInfo(),
-    cores: navigator.hardwareConcurrency || 0,
-    deviceType: getDeviceType(),
-
-    // Add new fields
-    colorDepth: `${window.screen.colorDepth}-bit`,
-    pixelRatio: window.devicePixelRatio,
-    online: navigator.onLine,
-    cookiesEnabled: navigator.cookieEnabled,
-    doNotTrack: navigator.doNotTrack === '1',
-  };
-}
-
-const checkProviderStatus = async (url: string | null, providerName: string): Promise<ProviderStatus> => {
-  if (!url) {
-    console.log(`[Debug] No URL provided for ${providerName}`);
-    return {
-      name: providerName,
-      enabled: false,
-      isLocal: true,
-      isRunning: false,
-      error: 'No URL configured',
-      lastChecked: new Date(),
-      url: null,
-    };
-  }
-
-  console.log(`[Debug] Checking status for ${providerName} at ${url}`);
-
-  const startTime = performance.now();
-
+const fetchPullRequests = async (): Promise<PullRequest[]> => {
   try {
-    if (providerName.toLowerCase() === 'ollama') {
-      // Special check for Ollama root endpoint
-      try {
-        console.log(`[Debug] Checking Ollama root endpoint: ${url}`);
+    const response = await fetch('/api/git/pull-requests');
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: {
-            Accept: 'text/plain,application/json',
-          },
-        });
-        clearTimeout(timeoutId);
-
-        const text = await response.text();
-        console.log(`[Debug] Ollama root response:`, text);
-
-        if (text.includes('Ollama is running')) {
-          console.log(`[Debug] Ollama running confirmed via root endpoint`);
-          return {
-            name: providerName,
-            enabled: false,
-            isLocal: true,
-            isRunning: true,
-            lastChecked: new Date(),
-            responseTime: performance.now() - startTime,
-            url,
-          };
-        }
-      } catch (error) {
-        console.log(`[Debug] Ollama root check failed:`, error);
-
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-        if (errorMessage.includes('aborted')) {
-          return {
-            name: providerName,
-            enabled: false,
-            isLocal: true,
-            isRunning: false,
-            error: 'Connection timeout',
-            lastChecked: new Date(),
-            responseTime: performance.now() - startTime,
-            url,
-          };
-        }
-      }
+    if (!response.ok) {
+      throw new Error('Failed to fetch PRs');
     }
 
-    // Try different endpoints based on provider
-    const checkUrls = [`${url}/api/health`, url.endsWith('v1') ? `${url}/models` : `${url}/v1/models`];
-    console.log(`[Debug] Checking additional endpoints:`, checkUrls);
+    const data = await response.json();
+    console.log('GitHub PR Response:', data);
 
-    const results = await Promise.all(
-      checkUrls.map(async (checkUrl) => {
-        try {
-          console.log(`[Debug] Trying endpoint: ${checkUrl}`);
+    // Type guard function to validate PR data
+    function isPullRequestArray(data: unknown): data is PullRequest[] {
+      return (
+        Array.isArray(data) &&
+        data.every(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            'number' in item &&
+            typeof item.number === 'number' &&
+            'title' in item &&
+            typeof item.title === 'string' &&
+            'head' in item &&
+            typeof item.head === 'object' &&
+            item.head !== null &&
+            'ref' in item.head &&
+            typeof item.head.ref === 'string' &&
+            'sha' in item.head &&
+            typeof item.head.sha === 'string' &&
+            'html_url' in item &&
+            typeof item.html_url === 'string' &&
+            'created_at' in item &&
+            typeof item.created_at === 'string' &&
+            (('user' in item && (item.user === null || (typeof item.user === 'object' && 'login' in item.user))) ||
+              ('author' in item &&
+                (item.author === null || (typeof item.author === 'object' && 'login' in item.author)))),
+        )
+      );
+    }
 
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+    if (!isPullRequestArray(data)) {
+      console.error('Invalid PR data format:', data);
+      return [];
+    }
 
-          const response = await fetch(checkUrl, {
-            signal: controller.signal,
-            headers: {
-              Accept: 'application/json',
-            },
-          });
-          clearTimeout(timeoutId);
-
-          const ok = response.ok;
-          console.log(`[Debug] Endpoint ${checkUrl} response:`, ok);
-
-          if (ok) {
-            try {
-              const data = await response.json();
-              console.log(`[Debug] Endpoint ${checkUrl} data:`, data);
-            } catch {
-              console.log(`[Debug] Could not parse JSON from ${checkUrl}`);
-            }
-          }
-
-          return ok;
-        } catch (error) {
-          console.log(`[Debug] Endpoint ${checkUrl} failed:`, error);
-          return false;
-        }
-      }),
-    );
-
-    const isRunning = results.some((result) => result);
-    console.log(`[Debug] Final status for ${providerName}:`, isRunning);
-
-    return {
-      name: providerName,
-      enabled: false,
-      isLocal: true,
-      isRunning,
-      lastChecked: new Date(),
-      responseTime: performance.now() - startTime,
-      url,
-    };
-  } catch (error) {
-    console.log(`[Debug] Provider check failed for ${providerName}:`, error);
-    return {
-      name: providerName,
-      enabled: false,
-      isLocal: true,
-      isRunning: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      lastChecked: new Date(),
-      responseTime: performance.now() - startTime,
-      url,
-    };
+    return data;
+  } catch (error: unknown) {
+    console.error('Error fetching PRs:', error);
+    return [];
   }
 };
+
+const fetchSystemInfo = async (): Promise<SystemInfo | null> => {
+  try {
+    const response = await fetch('/api/system/info');
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch system info');
+    }
+
+    const data = await response.json();
+
+    if (!isSystemInfo(data)) {
+      console.error('Invalid system info format:', data);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching system info:', error);
+    return null;
+  }
+};
+
+const fetchProviderStatus = async (): Promise<ProviderStatus> => {
+  try {
+    const response = await fetch('/api/providers/status');
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch provider status');
+    }
+
+    const data = await response.json();
+
+    if (!isProviderStatus(data)) {
+      console.error('Invalid provider status format:', data);
+      return {};
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching provider status:', error);
+    return {};
+  }
+};
+
+// Type guard for SystemInfo
+function isSystemInfo(data: unknown): data is SystemInfo {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'version' in data &&
+    typeof data.version === 'string' &&
+    'platform' in data &&
+    typeof data.platform === 'string' &&
+    'arch' in data &&
+    typeof data.arch === 'string'
+  );
+}
+
+// Type guard for ProviderStatus
+function isProviderStatus(data: unknown): data is ProviderStatus {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    Object.entries(data).every(([_, value]) => {
+      return (
+        typeof value === 'object' &&
+        value !== null &&
+        'status' in value &&
+        (value.status === 'online' || value.status === 'offline' || value.status === 'error') &&
+        (!('message' in value) || typeof value.message === 'string')
+      );
+    })
+  );
+}
 
 export default function DebugTab() {
-  const { providers, isLatestBranch } = useSettings();
-  const [activeProviders, setActiveProviders] = useState<ProviderStatus[]>([]);
-  const [updateMessage, setUpdateMessage] = useState<string>('');
-  const [systemInfo] = useState<SystemInfo>(getSystemInfo());
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus>({});
+  const [activePR, setActivePR] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const updateProviderStatuses = async () => {
-    if (!providers) {
-      return;
-    }
+  useEffect(() => {
+    fetchPullRequests().then(setPullRequests);
+    fetchSystemInfo().then(setSystemInfo);
+    fetchProviderStatus().then(setProviderStatus);
+  }, []);
+
+  const handlePRCheckout = async (prNumber: number) => {
+    setIsLoading(true);
 
     try {
-      const entries = Object.entries(providers) as [string, IProviderConfig][];
-      const statuses = await Promise.all(
-        entries
-          .filter(([, provider]) => LOCAL_PROVIDERS.includes(provider.name))
-          .map(async ([, provider]) => {
-            const envVarName =
-              providerBaseUrlEnvKeys[provider.name].baseUrlKey || `REACT_APP_${provider.name.toUpperCase()}_URL`;
+      const response = await fetch('/api/git/checkout-pr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prNumber }),
+      });
 
-            // Access environment variables through import.meta.env
-            let settingsUrl = provider.settings.baseUrl;
+      if (!response.ok) {
+        throw new Error('Failed to checkout PR');
+      }
 
-            if (settingsUrl && settingsUrl.trim().length === 0) {
-              settingsUrl = undefined;
-            }
-
-            const url = settingsUrl || import.meta.env[envVarName] || null; // Ensure baseUrl is used
-            console.log(`[Debug] Using URL for ${provider.name}:`, url, `(from ${envVarName})`);
-
-            const status = await checkProviderStatus(url, provider.name);
-
-            return {
-              ...status,
-              enabled: provider.settings.enabled ?? false,
-            };
-          }),
-      );
-
-      setActiveProviders(statuses);
+      setActivePR(prNumber);
     } catch (error) {
-      console.error('[Debug] Failed to update provider statuses:', error);
+      console.error('Error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    updateProviderStatuses();
-
-    const interval = setInterval(updateProviderStatuses, 30000);
-
-    return () => clearInterval(interval);
-  }, [providers]);
-
-  const handleCheckForUpdate = useCallback(async () => {
-    if (isCheckingUpdate) {
-      return;
-    }
+  const handleResetToMain = async () => {
+    setIsLoading(true);
 
     try {
-      setIsCheckingUpdate(true);
-      setUpdateMessage('Checking for updates...');
+      const response = await fetch('/api/git/reset-main', {
+        method: 'POST',
+      });
 
-      const branchToCheck = isLatestBranch ? 'main' : 'stable';
-      console.log(`[Debug] Checking for updates against ${branchToCheck} branch`);
-
-      const localCommitResponse = await fetch(GITHUB_URLS.commitJson(branchToCheck));
-
-      if (!localCommitResponse.ok) {
-        throw new Error('Failed to fetch local commit info');
+      if (!response.ok) {
+        throw new Error('Failed to reset to main');
       }
 
-      const localCommitData = (await localCommitResponse.json()) as CommitData;
-      const remoteCommitHash = localCommitData.commit;
-      const currentCommitHash = versionHash;
-
-      if (remoteCommitHash !== currentCommitHash) {
-        setUpdateMessage(
-          `Update available from ${branchToCheck} branch!\n` +
-            `Current: ${currentCommitHash.slice(0, 7)}\n` +
-            `Latest: ${remoteCommitHash.slice(0, 7)}`,
-        );
-      } else {
-        setUpdateMessage(`You are on the latest version from the ${branchToCheck} branch`);
-      }
+      setActivePR(null);
     } catch (error) {
-      setUpdateMessage('Failed to check for updates');
-      console.error('[Debug] Failed to check for updates:', error);
+      console.error('Error:', error);
     } finally {
-      setIsCheckingUpdate(false);
+      setIsLoading(false);
     }
-  }, [isCheckingUpdate, isLatestBranch]);
-
-  const handleCopyToClipboard = useCallback(() => {
-    const debugInfo = {
-      System: systemInfo,
-      Providers: activeProviders.map((provider) => ({
-        name: provider.name,
-        enabled: provider.enabled,
-        isLocal: provider.isLocal,
-        running: provider.isRunning,
-        error: provider.error,
-        lastChecked: provider.lastChecked,
-        responseTime: provider.responseTime,
-        url: provider.url,
-      })),
-      Version: {
-        hash: versionHash.slice(0, 7),
-        branch: isLatestBranch ? 'main' : 'stable',
-      },
-      Timestamp: new Date().toISOString(),
-    };
-
-    navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2)).then(() => {
-      toast.success('Debug information copied to clipboard!');
-    });
-  }, [activeProviders, systemInfo, isLatestBranch]);
+  };
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-bolt-elements-textPrimary">Debug Information</h3>
-        <div className="flex gap-2">
+    <div className="space-y-8">
+      {/* System Info Section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">System Info</h3>
           <button
-            onClick={handleCopyToClipboard}
-            className="bg-bolt-elements-button-primary-background rounded-lg px-4 py-2 transition-colors duration-200 hover:bg-bolt-elements-button-primary-backgroundHover text-bolt-elements-button-primary-text"
+            onClick={() => fetchSystemInfo().then(setSystemInfo)}
+            className="text-sm px-3 py-1 text-blue-500 hover:text-blue-600 transition-colors"
           >
-            Copy Debug Info
+            Refresh
           </button>
+        </div>
+        {systemInfo ? (
+          <div className="space-y-2">
+            <div>Version: {systemInfo.version}</div>
+            <div>Platform: {systemInfo.platform}</div>
+            <div>Architecture: {systemInfo.arch}</div>
+          </div>
+        ) : (
+          <div>Failed to fetch system information</div>
+        )}
+      </div>
+
+      {/* Provider Status Section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Provider Status</h3>
           <button
-            onClick={handleCheckForUpdate}
-            disabled={isCheckingUpdate}
-            className={`bg-bolt-elements-button-primary-background rounded-lg px-4 py-2 transition-colors duration-200
-              ${!isCheckingUpdate ? 'hover:bg-bolt-elements-button-primary-backgroundHover' : 'opacity-75 cursor-not-allowed'}
-              text-bolt-elements-button-primary-text`}
+            onClick={() => fetchProviderStatus().then(setProviderStatus)}
+            className="text-sm px-3 py-1 text-blue-500 hover:text-blue-600 transition-colors"
           >
-            {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
+            Refresh
           </button>
+        </div>
+        <div className="space-y-2">
+          {Object.entries(providerStatus).length > 0 ? (
+            Object.entries(providerStatus).map(([provider, status]) => (
+              <div key={provider} className="flex items-center space-x-2">
+                <span>{provider}:</span>
+                <span
+                  className={`px-2 py-0.5 rounded text-sm ${
+                    status.status === 'online'
+                      ? 'bg-green-100 text-green-800'
+                      : status.status === 'error'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  {status.status}
+                </span>
+                {status.message && <span className="text-sm text-gray-500">{status.message}</span>}
+              </div>
+            ))
+          ) : (
+            <div>No provider status available</div>
+          )}
         </div>
       </div>
 
-      {updateMessage && (
-        <div
-          className={`bg-bolt-elements-surface rounded-lg p-3 ${
-            updateMessage.includes('Update available') ? 'border-l-4 border-yellow-400' : ''
-          }`}
-        >
-          <p className="text-bolt-elements-textSecondary whitespace-pre-line">{updateMessage}</p>
-          {updateMessage.includes('Update available') && (
-            <div className="mt-3 text-sm">
-              <p className="font-medium text-bolt-elements-textPrimary">To update:</p>
-              <ol className="list-decimal ml-4 mt-1 text-bolt-elements-textSecondary">
-                <li>
-                  Pull the latest changes:{' '}
-                  <code className="bg-bolt-elements-surface-hover px-1 rounded">git pull upstream main</code>
-                </li>
-                <li>
-                  Install any new dependencies:{' '}
-                  <code className="bg-bolt-elements-surface-hover px-1 rounded">pnpm install</code>
-                </li>
-                <li>Restart the application</li>
-              </ol>
+      {/* Pull Requests Section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Pull Requests</h3>
+          <button
+            onClick={() => fetchPullRequests().then(setPullRequests)}
+            className="text-sm px-3 py-1 text-blue-500 hover:text-blue-600 transition-colors"
+          >
+            Refresh PRs
+          </button>
+        </div>
+        <div className="space-y-3">
+          {pullRequests.map((pr) => (
+            <div
+              key={pr.number}
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex-grow mb-3 sm:mb-0">
+                <div className="font-medium text-gray-900 dark:text-gray-100">{pr.title}</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  #{pr.number} by {(pr.user || pr.author)?.login} • {new Date(pr.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    activePR === pr.number
+                      ? 'bg-gray-400 text-white cursor-not-allowed'
+                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                  }`}
+                  onClick={() => handlePRCheckout(pr.number)}
+                  disabled={activePR === pr.number || isLoading}
+                >
+                  Test PR
+                </button>
+                <a
+                  href={pr.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-1.5 text-sm font-medium bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
+                >
+                  View on GitHub
+                </a>
+              </div>
+            </div>
+          ))}
+          {pullRequests.length === 0 && (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              No pull requests available
             </div>
           )}
         </div>
-      )}
-
-      <section className="space-y-4">
-        <div>
-          <h4 className="text-md font-medium text-bolt-elements-textPrimary mb-2">System Information</h4>
-          <div className="bg-bolt-elements-surface rounded-lg p-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Operating System</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.os}</p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Device Type</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.deviceType}</p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Browser</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.browser}</p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Display</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">
-                  {systemInfo.screen} ({systemInfo.colorDepth}) @{systemInfo.pixelRatio}x
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Connection</p>
-                <p className="text-sm font-medium flex items-center gap-2">
-                  <span
-                    className={`inline-block w-2 h-2 rounded-full ${systemInfo.online ? 'bg-green-500' : 'bg-red-500'}`}
-                  />
-                  <span className={`${systemInfo.online ? 'text-green-600' : 'text-red-600'}`}>
-                    {systemInfo.online ? 'Online' : 'Offline'}
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Screen Resolution</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.screen}</p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Language</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.language}</p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">Timezone</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.timezone}</p>
-              </div>
-              <div>
-                <p className="text-xs text-bolt-elements-textSecondary">CPU Cores</p>
-                <p className="text-sm font-medium text-bolt-elements-textPrimary">{systemInfo.cores}</p>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-bolt-elements-surface-hover">
-              <p className="text-xs text-bolt-elements-textSecondary">Version</p>
-              <p className="text-sm font-medium text-bolt-elements-textPrimary font-mono">
-                {versionHash.slice(0, 7)}
-                <span className="ml-2 text-xs text-bolt-elements-textSecondary">
-                  (v{versionTag || '0.0.1'}) - {isLatestBranch ? 'nightly' : 'stable'}
-                </span>
-              </p>
-            </div>
+        {activePR && (
+          <div className="flex justify-end mt-4">
+            <button
+              className="px-4 py-1.5 text-sm font-medium bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              onClick={handleResetToMain}
+              disabled={isLoading}
+            >
+              Reset to Main
+            </button>
           </div>
-        </div>
-
-        <div>
-          <h4 className="text-md font-medium text-bolt-elements-textPrimary mb-2">Local LLM Status</h4>
-          <div className="bg-bolt-elements-surface rounded-lg">
-            <div className="grid grid-cols-1 divide-y">
-              {activeProviders.map((provider) => (
-                <div key={provider.name} className="p-3 flex flex-col space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            !provider.enabled ? 'bg-gray-300' : provider.isRunning ? 'bg-green-400' : 'bg-red-400'
-                          }`}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-bolt-elements-textPrimary">{provider.name}</p>
-                        {provider.url && (
-                          <p className="text-xs text-bolt-elements-textSecondary truncate max-w-[300px]">
-                            {provider.url}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 text-xs rounded-full ${
-                          provider.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {provider.enabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                      {provider.enabled && (
-                        <span
-                          className={`px-2 py-0.5 text-xs rounded-full ${
-                            provider.isRunning ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {provider.isRunning ? 'Running' : 'Not Running'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pl-5 flex flex-col space-y-1 text-xs">
-                    {/* Status Details */}
-                    <div className="flex flex-wrap gap-2">
-                      <span className="text-bolt-elements-textSecondary">
-                        Last checked: {new Date(provider.lastChecked).toLocaleTimeString()}
-                      </span>
-                      {provider.responseTime && (
-                        <span className="text-bolt-elements-textSecondary">
-                          Response time: {Math.round(provider.responseTime)}ms
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Error Message */}
-                    {provider.error && (
-                      <div className="mt-1 text-red-600 bg-red-50 rounded-md p-2">
-                        <span className="font-medium">Error:</span> {provider.error}
-                      </div>
-                    )}
-
-                    {/* Connection Info */}
-                    {provider.url && (
-                      <div className="text-bolt-elements-textSecondary">
-                        <span className="font-medium">Endpoints checked:</span>
-                        <ul className="list-disc list-inside pl-2 mt-1">
-                          <li>{provider.url} (root)</li>
-                          <li>{provider.url}/api/health</li>
-                          <li>{provider.url}/v1/models</li>
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {activeProviders.length === 0 && (
-                <div className="p-4 text-center text-bolt-elements-textSecondary">No local LLMs configured</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+        )}
+      </div>
     </div>
   );
 }

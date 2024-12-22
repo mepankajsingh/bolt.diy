@@ -12,6 +12,12 @@ export const PROVIDER_REGEX = /\[Provider: (.*?)\]\n\n/;
 export const DEFAULT_MODEL = 'claude-3-5-sonnet-latest';
 export const PROMPT_COOKIE_KEY = 'cachedPrompt';
 
+export const GITHUB_URLS = {
+  // ... existing URLs ...
+  pulls: 'https://api.github.com/repos/stackblitz-labs/bolt.diy/pulls',
+  raw: 'https://raw.githubusercontent.com/stackblitz-labs/bolt.diy',
+};
+
 const logger = createScopedLogger('Constants');
 
 const PROVIDER_LIST: ProviderInfo[] = [

@@ -20,6 +20,13 @@ export interface OllamaApiResponse {
   models: OllamaModel[];
 }
 
+export interface ProviderStatus {
+  [key: string]: {
+    available: boolean;
+    error?: string;
+  };
+}
+
 export interface ModelInfo {
   name: string;
   label: string;
