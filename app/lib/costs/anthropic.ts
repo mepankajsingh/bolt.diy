@@ -3,7 +3,7 @@ import type { ProviderPricing, PricingMetadata } from './types';
 export const anthropicMetadata: PricingMetadata = {
   currency: 'USD',
   unit: '1K tokens',
-  description: 'Anthropic Claude models pricing',
+  description: 'Anthropic models pricing',
 };
 
 export const anthropicPricing: ProviderPricing = {

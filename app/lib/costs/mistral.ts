@@ -3,7 +3,7 @@ import type { ProviderPricing, PricingMetadata } from './types';
 export const mistralMetadata: PricingMetadata = {
   currency: 'USD',
   unit: '1K tokens',
-  description: 'Mistral AI models pricing',
+  description: 'Mistral models pricing',
 };
 
 export const mistralPricing: ProviderPricing = {

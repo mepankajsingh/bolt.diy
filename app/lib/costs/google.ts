@@ -3,7 +3,7 @@ import type { ProviderPricing, PricingMetadata } from './types';
 export const googleMetadata: PricingMetadata = {
   currency: 'USD',
   unit: '1K tokens',
-  description: 'Google Gemini models pricing',
+  description: 'Google models pricing',
 };
 
 export const googlePricing: ProviderPricing = {

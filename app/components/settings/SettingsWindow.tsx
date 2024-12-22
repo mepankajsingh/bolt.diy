@@ -14,6 +14,8 @@ import EventLogsTab from './event-logs/EventLogsTab';
 import ConnectionsTab from './connections/ConnectionsTab';
 import TokenUsageTab from './tokenusagestats/TokenUsageTab';
 import { useTokenUsage } from '~/lib/hooks/useTokenUsage';
+import { useStore } from '@nanostores/react';
+import { chatStore } from '~/lib/stores/chat';
 
 interface SettingsProps {
   open: boolean;
@@ -26,6 +28,7 @@ export const SettingsWindow = ({ open, onClose }: SettingsProps) => {
   const { debug, eventLogs } = useSettings();
   const [activeTab, setActiveTab] = useState<TabType>('chat-history');
   const { modelUsages, totalUsage } = useTokenUsage();
+  const chatState = useStore(chatStore);
 
   // Get all model usages and sort them by total tokens
   const sortedUsages = Array.from(modelUsages.values()).sort((a, b) => b.totalTokens - a.totalTokens);
@@ -37,7 +40,7 @@ export const SettingsWindow = ({ open, onClose }: SettingsProps) => {
     { id: 'features', label: 'Features', icon: 'i-ph:star', component: <FeaturesTab /> },
     {
       id: 'advanced-usage',
-      label: 'Advanced Usage',
+      label: 'BETA :Advanced Usage',
       icon: 'i-ph:chart-line',
       component:
         sortedUsages.length > 0 ? (
@@ -48,11 +51,12 @@ export const SettingsWindow = ({ open, onClose }: SettingsProps) => {
                 usage={usage}
                 totalTokens={totalUsage.totalTokens}
                 showTitle={index === 0}
+                chatTitle={chatState.title || 'Untitled Chat'}
               />
             ))}
           </div>
         ) : (
-          <div className="text-sm text-bolt-elements-textSecondary p-3">No token usage data available yet.</div>
+          <div>No usage data available</div>
         ),
     },
     ...(debug

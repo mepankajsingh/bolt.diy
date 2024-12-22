@@ -7,6 +7,10 @@ export const openrouterMetadata: PricingMetadata = {
 };
 
 export const openrouterPricing: ProviderPricing = {
+  'gpt-4o': {
+    prompt: 0.03,
+    completion: 0.06,
+  },
   'anthropic/claude-3.5-sonnet': {
     prompt: 0.003,
     completion: 0.015,
@@ -26,10 +30,6 @@ export const openrouterPricing: ProviderPricing = {
   'google/gemini-pro-1.5': {
     prompt: 0.001,
     completion: 0.002,
-  },
-  'x-ai/grok-beta': {
-    prompt: 0.002,
-    completion: 0.006,
   },
   'mistralai/mistral-nemo': {
     prompt: 0.0002,

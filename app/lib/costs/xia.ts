@@ -19,4 +19,8 @@ export const xiaPricing: ProviderPricing = {
     prompt: 0.003, // $0.003 per 1K tokens for prompt
     completion: 0.004, // $0.004 per 1K tokens for completion
   },
+  'x-ai/grok-beta': {
+    prompt: 0.002, // $0.002 per 1K tokens for prompt
+    completion: 0.006, // $0.006 per 1K tokens for completion
+  },
 } as const;

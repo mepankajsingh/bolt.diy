@@ -181,6 +181,10 @@ export const ChatImpl = memo(
       }
     }, [messages, isLoading, parseMessages]);
 
+    useEffect(() => {
+      chatStore.setKey('title', description || 'Untitled Chat');
+    }, [description]);
+
     const scrollTextArea = () => {
       const textarea = textareaRef.current;
 
