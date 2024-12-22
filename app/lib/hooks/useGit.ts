@@ -95,7 +95,36 @@ export function useGit() {
     [webcontainer],
   );
 
-  return { ready, gitClone };
+  const returnToPreviousBranch = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/git/return-branch', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as { message?: string };
+        throw new Error(errorData.message || 'Failed to return to previous branch');
+      }
+
+      toast.success('Successfully returned to previous branch');
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Error returning to previous branch:', error.message);
+        toast.error(error.message);
+      } else {
+        console.error('Error returning to previous branch:', String(error));
+        toast.error(String(error));
+      }
+
+      throw error;
+    }
+  }, []);
+
+  return {
+    ready,
+    gitClone,
+    returnToPreviousBranch,
+  };
 }
 
 const getFs = (
