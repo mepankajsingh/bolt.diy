@@ -40,7 +40,7 @@ export const SettingsWindow = ({ open, onClose }: SettingsProps) => {
     { id: 'features', label: 'Features', icon: 'i-ph:star', component: <FeaturesTab /> },
     {
       id: 'advanced-usage',
-      label: 'BETA :Advanced Usage',
+      label: 'Advanced Usage Stats',
       icon: 'i-ph:chart-line',
       component:
         sortedUsages.length > 0 ? (
@@ -115,10 +115,16 @@ export const SettingsWindow = ({ open, onClose }: SettingsProps) => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={classNames(activeTab === tab.id ? styles.active : '')}
+                    className={classNames(
+                      activeTab === tab.id ? styles.active : '',
+                      tab.id === 'advanced-usage' ? 'justify-between' : '',
+                    )}
                   >
-                    <div className={tab.icon} />
-                    {tab.label}
+                    <div className="flex items-center gap-2">
+                      <div className={tab.icon} />
+                      {tab.id !== 'advanced-usage' && tab.label}
+                    </div>
+                    {tab.id === 'advanced-usage' && <div className="flex-1 text-center pr-6">{tab.label}</div>}
                   </button>
                 ))}
                 <div className="mt-auto flex flex-col gap-2">
