@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSettings } from '~/lib/hooks/useSettings';
-import commit from '~/commit.json';
 import { toast } from 'react-toastify';
 import { providerBaseUrlEnvKeys } from '~/utils/constants';
+
+// Default commit info for development
+const commitInfo = {
+  commit: 'development',
+  version: '0.0.0',
+};
 
 interface ProviderStatus {
   name: string;
@@ -44,11 +49,9 @@ interface CommitData {
   version?: string;
 }
 
-const connitJson: CommitData = commit;
-
 const LOCAL_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
-const versionHash = connitJson.commit;
-const versionTag = connitJson.version;
+const versionHash = commitInfo.commit;
+const versionTag = commitInfo.version;
 const GITHUB_URLS = {
   original: 'https://api.github.com/repos/stackblitz-labs/bolt.diy/commits/main',
   fork: 'https://api.github.com/repos/Stijnus/bolt.new-any-llm/commits/main',
