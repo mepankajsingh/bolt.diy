@@ -13,7 +13,7 @@ interface HeaderActionButtonsProps {}
 export function HeaderActionButtons({}: HeaderActionButtonsProps) {
   const showWorkbench = useStore(workbenchStore.showWorkbench);
   const { showChat } = useStore(chatStore);
-  const { returnToPreviousBranch } = useGit();
+  const { returnToPreviousBranch, isOnPRBranch } = useGit();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -35,19 +35,23 @@ export function HeaderActionButtons({}: HeaderActionButtonsProps) {
 
   return (
     <>
-      <PullRequestTestingBanner />
+      {isOnPRBranch && (
+        <>
+          <PullRequestTestingBanner />
+          <button
+            onClick={() => setIsDialogOpen(true)}
+            className={classNames(
+              'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+              'bg-bolt-primary text-white hover:bg-bolt-primary/90',
+              'border border-bolt-primary/20',
+            )}
+          >
+            <div className="i-ph:git-branch" />
+            Return to Previous Branch
+          </button>
+        </>
+      )}
       <div className="flex gap-2 items-center">
-        <button
-          onClick={() => setIsDialogOpen(true)}
-          className={classNames(
-            'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
-            'bg-bolt-primary text-white hover:bg-bolt-primary/90',
-            'border border-bolt-primary/20',
-          )}
-        >
-          <div className="i-ph:git-branch" />
-          Return to Previous Branch
-        </button>
         <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden">
           <Button
             active={showChat}
@@ -75,12 +79,14 @@ export function HeaderActionButtons({}: HeaderActionButtonsProps) {
           </Button>
         </div>
       </div>
-      <ReturnBranchDialog
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        onConfirm={handleReturn}
-        isLoading={isLoading}
-      />
+      {isOnPRBranch && (
+        <ReturnBranchDialog
+          isOpen={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          onConfirm={handleReturn}
+          isLoading={isLoading}
+        />
+      )}
     </>
   );
 }
